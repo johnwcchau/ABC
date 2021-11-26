@@ -1,0 +1,395 @@
+<!DOCTYPE HTML>
+<html>
+    <head>
+        <title>ABC (: or the automatic bert clustering machine :)</title>
+        
+        <link rel="stylesheet" href="https://cdn.datatables.net/1.11.3/css/jquery.dataTables.min.css" />
+        <link rel="stylesheet" href="https://cdn.datatables.net/select/1.3.3/css/select.dataTables.min.css" />
+        <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.0/themes/base/jquery-ui.css">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-modal/0.9.1/jquery.modal.min.css" />
+        <link rel="stylesheet" href="static/jqtree.css" />
+        <link rel="stylesheet" href="static/index.css" />
+
+        <script type="text/javascript" src="https://code.jquery.com/jquery-3.2.0.min.js"></script>
+        <script type="text/javascript" src="https://code.jquery.com/ui/1.13.0/jquery-ui.js"></script>
+        <script type="text/javascript" src="https://cdn.datatables.net/1.11.3/js/jquery.dataTables.min.js"></script>
+        <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jquery-modal/0.9.1/jquery.modal.min.js"></script>
+        <script type="text/javascript" src="static/jquery.csv.min.js"></script>
+        <script type="text/javascript" src="static/tree.jquery.js"></script>
+        <script src='https://cdn.plot.ly/plotly-2.4.2.min.js'></script>
+        
+        <script type="text/javascript" src='static/index.js'></script>
+    </head>
+    <body>
+        <nav id="menu">
+            <a href="#" class="menubtn"><span></span></a>
+            <h1>ABC</h1>
+            <h2>(: or the automatic bert clustering machine :)</h2>
+            <div class="toolbar">
+                <a href="#" id="model_name">Unnamed</a>
+            </div>
+            <div class="toolbar" id="toolbar-basic">
+                <h2>Basic</h2>
+                <a href="#upload_dataset_dialog" rel="modal:open">Upload</a>
+                <a href="#new_model_dialog" rel="modal:open">Create model</a>
+                <a href="#training_dialog" rel="modal:open">Training / Testing</a>
+                <a href="#predict_dialog" id="show_predict_dialog" rel="modal:open">Adhoc Predict</a>
+                <a href="#download_dialog" rel="modal:open">Download</a>
+            </div>
+            <div class="toolbar" id="toolbar-analyse">
+                <h2>Analyse</h2>
+                <a href="#" id="visualize_group_counts">Groups counts</a>
+                <a href="#" id="visualize_scatters">Projection scatters</a>
+                <a href="#" id="visualize_timeline">Group trends</a>
+                <!-- <a href="#" id="visualize_text_treemap">Groups treemap</a> -->
+            </div>
+            <div class="toolbar" id="toolbar-advance">
+                <h2>Advanced</h2>
+                <a href="#" id="load_checkpoint">Load checkpoint</a>
+                <a href="#" id="save_checkpoint">Save checkpoint</a>
+                <a href="#" id="new_model">Reset everything</a>
+            </div>
+        </nav>
+        <main>
+            <section id="tabs">
+                <ul>
+                    <li><a href="#datasetpane" id="tb_dataset">Data</a></li>
+                    <li><a href="#modelpane" id="tb_model">Groups</a></li>
+                    <li><a href="#visualizepane" id="tb_visualize">Visualization</a></li>
+                </ul>
+                <div id="datasetpane" class="mainpane">
+                    <div class="toolbar">
+                        <a href="#" id="show_trainset" class="selected">Train set</a>
+                        <a href="#" id="show_devset">Dev set</a>
+                        <a href="#" id="delete_row">Delete selected</a>
+                        <a href="#" id="copy_selected">Copy selected</a>
+                        <a href="#" id="move_selected">Move selected</a>
+                        <a href="#" id="clean_dataset">Clear dataset</a>
+                    </div>
+                    <table id="dataset_table">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="dataset_chkall" /></th>
+                                <th>#</th>
+                                <th>Corpus</th>
+                                <th>Reference</th>
+                                <th>Timestamp</th>
+                                <th>Target</th>
+                                <th>Predicted</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="modelpane" class="mainpane">
+                    <div class="toolbar">
+                        <a href="#" id="table_view">Table view</a>
+                        <a href="#" id="tree_view">Tree view</a>
+                        <input type="text" id="group_search" placeholder="Filter" />
+                    </div>
+                    <div class="horizontal_split">
+                        <section id="group_charts">
+                            <div class="placeholder">
+                                No data (Training => Generate Stats)
+                            </div>
+                        </section>
+                        <section id="group_list">
+                            <table id="groups_table">
+                                <thead>
+                                    <tr>
+                                        <th></th>
+                                        <th>group</th>
+                                        <th>Mean Sample</th>
+                                        <th>Count</th>
+                                        <th>Radius</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                </tbody>
+                            </table>
+                            <div id="groups_tree"></div>
+                            <div class="placeholder">
+                                No data (Training => Generate Stats)
+                            </div>
+                        </section>
+                    </div>
+                </div>
+                <div id="visualizepane" class="mainpane">
+                    <div class="toolbar"></div>
+                    <div id="visualization_chart"></div>
+                </div>
+            </section>
+            <section id="logs">
+                <input type="button" name="log_clear" id="log_clear" value="Clear Log" />
+            </section>
+        </main>
+        
+        <dialog id="upload_dataset_dialog" class="modal">
+            <div class="toolbar">
+                <a href="#" id="confirm_upload_dataset">Begin Upload</a>
+            </div>
+            <div class="dropzone">
+                <span class="dropzone_prompt" id="dataset_file_prompt">Click / drag and drop file here</span>
+                <input class="dropzone_input" type="file" name="file_dataset" id="file_dataset" accept=".csv,.json,.sqlite,.sqlite3,.model">
+            </div>
+            <div id="upload_csv" style="display:none">
+                <table id="dataset_preview">
+                </table>
+            </div>
+            <div id="upload_sqlite" style="display:none">
+                <table>
+                    <tbody>
+                        <tr>
+                            <td colspan="2"><label for="sql_table">Table name</label></td>
+                            <td><input type="text" id="sql_table" name="sql_table" value="dataset"></td>
+                        </tr>
+                        <tr>
+                            <td colspan="2"><label for="sql_text">Text row</label></td>
+                            <td><input type="text" id="sql_text" name="sql_text" value="text"></td>
+                        </tr>
+                        <tr>
+                            <td><input type="checkbox" id="sql_has_embedding" name="sql_has_embedding"></td>
+                            <td><label for="sql_has_embedding">Embedding row</label></td>
+                            <td><input type="text" id="sql_embedding" name="sql_embedding" value="embedding" disabled></td>
+                        </tr>
+                        <tr>
+                            <td><input type="checkbox" id="sql_has_umap" name="sql_has_umap"></td>
+                            <td><label for="sql_has_umap">Reduced embedding row</label></td>
+                            <td><input type="text" id="sql_umap" name="sql_umap" value="umap" disabled></td>
+                        </tr>                
+                        <tr>
+                            <td><input type="checkbox" id="sql_has_x" name="sql_has_x"></td>
+                            <td><label for="sql_has_x">Projection X row</label></td>
+                            <td><input type="text" id="sql_x" name="sql_x" value="x" disabled></td>
+                        </tr>
+                        <tr>
+                            <td><input type="checkbox" id="sql_has_y" name="sql_has_y"></td>
+                            <td><label for="sql_has_y">Projection Y row</label></td>
+                            <td><input type="text" id="sql_y" name="sql_y" value="y" disabled></td>
+                        </tr>
+                        <tr>
+                            <td><input type="checkbox" id="sql_has_z" name="sql_has_z"></td>
+                            <td><label for="sql_has_z">Projection Z row</label></td>
+                            <td><input type="text" id="sql_z" name="sql_z" value="z" disabled></td>
+                        </tr>
+                        <tr>
+                            <td><input type="checkbox" id="sql_has_ref" name="sql_has_ref"></td>
+                            <td><label for="sql_has_ref">Reference row</label></td>
+                            <td><input type="text" id="sql_ref" name="sql_ref" value="ref" disabled></td>
+                        </tr>
+                        <tr>
+                            <td><input type="checkbox" id="sql_has_ts" name="sql_has_ts"></td>
+                            <td><label for="sql_has_ts">Timestamp row</label></td>
+                            <td><input type="text" id="sql_ts" name="sql_ts" value="ts" disabled></td>
+                        </tr>
+                        <tr>
+                            <td><input type="checkbox" id="sql_has_target" name="sql_has_target"></td>
+                            <td><label for="sql_has_target">Target row</label></td>
+                            <td><input type="text" id="sql_target" name="sql_target" value="target" disabled></td>
+                        </tr>
+                        <tr>
+                            <td><input type="checkbox" id="sql_has_predict" name="sql_has_predict"></td>
+                            <td><label for="sql_has_predict">Predicted result row</label></td>
+                            <td><input type="text" id="sql_predict" name="sql_predict" value="predict" disabled></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </dialog>
+        <dialog id="new_model_dialog" class="modal">
+            <div class="toolbar">
+                <a href="#" id="confirm_create_model">Create Model</a>
+            </div>
+            <section>
+                <span>
+                    <input type="checkbox" name='new_model_new_embed' id="new_model_new_embed" checked />
+                    <label for="new_model_new_embed">New embedding model</label>
+                </span>
+                <span>
+                    <input type="checkbox" name='new_model_new_umap' id="new_model_new_umap" checked />
+                    <label for="new_model_new_umap">New dimension reduction model</label>
+                </span>
+                <span>
+                    <input type="checkbox" name='new_model_new_hdbscan' id="new_model_new_hdbscan" checked />
+                    <label for="new_model_new_hdbscan">New clustering model</label>
+                </span>
+            </section>
+            <section id="new_model_embed">
+                <h2>Embedding</h2>
+                <label for="embed_type">Library</label>
+                <select name="embed_type" id="embed_type">
+                    <option value="sentence_transformer" selected>Sentence Transformer</option>
+                </select>
+                <label id="embed_model_label" for="embed_model">Model</label>
+                <select name="embed_model" id="embed_model">
+                    <option value="paraphrase-multilingual-MiniLM-L12-v2">paraphrase-multilingual-MiniLM-L12-v2 (64.25 / 7500)</option>
+                    <option value="paraphrase-multilingual-mpnet-base-v2" selected>paraphrase-multilingual-mpnet-base-v2 (65.83 / 2500)</option>
+                    <option value="all-MiniLM-L6-v2">all-MiniLM-L6-v2 (68.06 / 14200)</option>
+                    <option value="all-MiniLM-L12-v2">MiniLM (68.70 / 7500)</option>
+                    <option value="all-mpnet-base-v2">all-mpnet-base-v2 (69.57 / 2800)</option>
+                </select>
+            </section>
+            <section id="new_model_umap">
+                <h1>Dimension reduction</h1>
+                <label for="umap_type">Model</label>
+                <input name="umap_type" type="text" id="umap_type" value="umap" disabled />
+                
+                <label for="umap_transform_seed">Transform seed</label>
+                <input name="umap_transform_seed" id="transform_seed" type="number" value="42" />
+                
+                <label for="umap_n_neighbors">
+                    <a href="https://umap-learn.readthedocs.io/en/latest/parameters.html#n-neighbors" target="_blank">#Neighbours</a>
+                </label>
+                <input name="umap_n_neighbors" id="umap_n_neighbors" type="number" value="15" />
+                <label for="umap_n_components">
+                    <a href="https://umap-learn.readthedocs.io/en/latest/parameters.html#n-components" target="_blank">#Components</a>
+                </label>
+                <input name="umap_n_components" id="umap_n_components" type="number" value="10" />
+                <label for="umap_min_dist">
+                    <a href="https://umap-learn.readthedocs.io/en/latest/parameters.html#min-dist" target="_blank">Min Dist</a>
+                </label>
+                <input name="umap_min_dist" id="umap_min_dist" type="text" value="" />
+                <label for="umap_metric">
+                    <a href="https://umap-learn.readthedocs.io/en/latest/parameters.html#metric" target="_blank">Metric</a>
+                </label>
+                <select name="umap_metric" id="umap_metric">
+                    <option value="" disabled>---Minkowski Style---</option>
+                    <option value="euclidean">euclidean</option>
+                    <option value="manhattan">manhattan</option>
+                    <option value="chebyshev">chebyshev</option>
+                    <option value="minkowski">minkowski</option>
+                    <option value="" disabled>---Miscellaneous Spatial---</option>
+                    <option value="canberra">canberra</option>
+                    <option value="braycurtis">braycurtis</option>
+                    <option value="haversine">haversine</option>
+                    <option value="" disabled>---Normalized Spatial---</option>
+                    <option value="mahalanobis">mahalanobis</option>
+                    <option value="wminkowski">wminkowski</option>
+                    <option value="seuclidean">seuclidean</option>
+                    <option value="" disabled>---Angular and Correlation---</option>
+                    <option value="cosine" cbecked>cosine</option>
+                    <option value="correlation">correlation</option>
+                </select>
+                <label for="umap_target_metric">Target Metric</label>
+                <!-- <input name="umap_target_metric" id="umap_target_metric" type="text" value="categorical" /> -->
+                <input name="umap_target_metric" id="umap_target_metric" type="text" value="" />
+                <label for="umap_target_weight">Target Weight</label>
+                <input name="umap_target_weight" id="umap_target_weight" type="text" value="" />
+            </section>
+            <section id="new_model_hdbscan">
+                <h1>Clustering</h1>
+                <label for="hdbscan_type">Model</label>
+                <input name="hdbscan_type" id="hdbscan_type" type="text" value="hdbscan" disabled />
+                <label for="hdbscan_min_cluster_size">Min Cluster Size</label>
+                <input name="hdbscan_min_cluster_size" id="hdbscan_min_cluster_size" value="5" />
+                <label for="hdbscan_min_samples">Min Samples</label>
+                <input name="hdbscan_min_samples" id="hdbscan_min_samples" value="" />
+                <label for="hdbscan_metric">Metric</label>
+                <input name="hdbscan_metric" id="hdbscan_metric" type="text" value="euclidean" />
+                <label for="hdbscan_cluster_selection_method">Cluster Selection Method</label>
+                <input name="hdbscan_cluster_selection_method" id="hdbscan_cluster_selection_method" type="text" value="eom" />
+                <label for="hdbscan_alpha">Alpha</label>
+                <input name="hdbscan_alpha" id="hdbscan_alpha" type="text" value="" />
+                <label for="hdbscan_cluster_selection_epsilon">Eplison</label>
+                <input name="hdbscan_cluster_selection_epsilon" id="hdbscan_cluster_selection_epsilon" type="text" value="" />
+                <label for="hdbscan_algorithm">Algorithm</label>
+                <input name="hdbscan_algorithm" id="hdbscan_algorithm" type="text" value="" />
+            </section>
+        </dialog>
+        <dialog id="training_dialog" class="modal">
+            <div class="toolbar">
+                <a href="#" id="confirm_begin_training">Begin Training on train set</a>
+                <a href="#" id="confirm_begin_testing">Begin Testing on dev set</a>
+            </div>
+            <section>
+                <h2>Advanced settings</h2>
+                <span>
+                    <input type="checkbox" name='train_reset_embedding' id="train_reset_embedding" />
+                    <label for="train_reset_embedding">Reset embeddings</label>
+                </span>
+                <span>
+                    <input type="checkbox" name='train_reset_reduction' id="train_reset_reduction" />
+                    <label for="train_reset_reduction">Reset reduced embeddings</label>
+                </span>
+                <span>
+                    <input type="checkbox" name='train_reset_clustering' id="train_reset_clustering" />
+                    <label for="train_reset_clustering">Reset clustering</label>
+                </span>
+                <span>
+                    <input type="checkbox" name='train_reset_summarize' id="train_reset_summarize" />
+                    <label for="train_reset_summarize">Reset summaries</label>
+                </span>
+                <span>
+                    <input type="checkbox" name='train_embedding' id="train_embedding" checked />
+                    <label for="train_embedding">Create embeddings</label>
+                </span>
+                <span>
+                    <input type="checkbox" name='train_reduction' id="train_reduction" checked />
+                    <label for="train_reduction">Reduce embeddings dimension</label>
+                </span>
+                <span>
+                    <input type="checkbox" name='train_clustering' id="train_clustering" checked />
+                    <label for="train_clustering">Clustering</label>
+                </span>
+                <span>
+                    <input type="checkbox" name='train_summarize' id="train_summarize" checked />
+                    <label for="train_summarize">Summarize</label>
+                </span>
+            </section>
+
+        </dialog>
+        <dialog id="predict_dialog" class="modal">
+            <div class="toolbar">
+                <a href="#" id="confirm_predict">Predict</a>
+            </div>
+            <section>
+                <textarea id="predict_texts" placeholder="One line per prediction"></textarea>
+            </section>
+            <section>
+                <table id="predict_result">
+                    <thead>
+                        <tr>
+                            <th>Text</th>
+                            <th>Predict</th>
+                            <th>Distance</th>
+                            <th>Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </section>
+        </dialog>
+        <dialog id="download_dialog" class="modal">
+            <section>
+            </section>
+        </dialog>
+        <dialog id="group_info_dialog" class="modal">
+            <div class="toolbar">
+                <a href="#" id="filter_ds">List texts</a>
+                <a href="#" id="filter_ds_with_neighbour">List texts with neighbours</a>
+                <a href="#" id="locate_ds">Locate texts</a>
+                <a href="#" id="locate_ds_with_neighbour">Locate texts with neighbours</a>
+                <a href="#" id="ds_trends">Trends</a>
+                <a href="#" id="ds_trends_with_neighbour">Trends with neighbours</a>
+            </div>
+            <p><span class='infoline_name'>Group</span><span id="tinfo_id" class='infoline_value'></span></p>
+            <p><span class='infoline_name'>Count</span><span id="tinfo_count" class='infoline_value'></span></p>
+            <p><span class='infoline_name'>Coverage</span><span id="tinfo_coverage" class='infoline_value'></span></p>
+            <p><span class='infoline_name'>Most Representative Text</span><span class='infoline_value' id="tinfo_repr_text"></span></p>
+            <p>Neighbours</p><p id="tinfo_neighbours"></p>
+        </dialog>
+        <dialog id="load_checkpoint_dialog" class="modal">
+            <section>
+            </section>
+        </dialog>
+        <dialog id="loading_dialog" class="modal">
+            <section>            
+                <div id="loading_bar"></div>
+                <div id="loading_msg"></div>
+            </section>
+        </dialog>
+        <a id="hb_groupinfo" href="#group_info_dialog" rel="modal:open" style="display: none">_</a>
+        <a id="hb_checkpoint" href="#load_checkpoint_dialog" rel="modal:open" style="display: none">_</a>
+    </body>
+</html>
