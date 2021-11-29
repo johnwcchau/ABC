@@ -42,14 +42,16 @@ main {
 #menu h1 {
     font-size: 3em;
     text-align: center;
-    padding: 1em 0.5em 0 0;
+    padding: 0;
     margin: 0;
+    line-height: 1em;
 }
 #menu h2 {
     font-size: 1.2em;
     text-align: center;
-    padding: 0 2.5em 0 0;
+    padding: 0;
     margin: 0;
+    line-height: 1em;
 }
 .menubtn {
     position: absolute;
@@ -266,6 +268,18 @@ main {
     display: none;
 }
 
+.formtable {
+    display: table;
+}
+.formtable span {
+    display: table-row;
+}
+.formtable span * {
+    display: table-cell;
+}
+.formtable span input {
+    width: 100%;
+}
 #new_model_embed,
 #new_model_umap,
 #new_model_hdbscan {
@@ -305,6 +319,7 @@ main {
     border-radius: 0.4em;
     margin-right: -1px;
     margin-bottom: -5px;
+    margin-left: 2px;
 }
 #groups_tree a.jqtree-toggler {
     margin-right: 1.5em;
@@ -314,17 +329,9 @@ main {
 #groups_tree span.jqtree-title-folder {
     color: #b98;
 }
-#visualization_dialog {
-    width: 80vw;
-    height: 80vh !important;
-}
 #visualization_chart {
     width: 75vw;
     height: 75vh !important;
-}
-#visualization_frame {
-    width: 100%;
-    height: 100%;
 }
 #log_clear {
     position: absolute;
@@ -361,7 +368,8 @@ iframe {
     width: 0;
     height: 0;
 }
-#load_checkpoint_dialog {
+#load_checkpoint_dialog,
+#download_dialog {
     width: 50vw;
 }
 #load_checkpoint_dialog span {

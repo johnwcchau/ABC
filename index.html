@@ -1,7 +1,7 @@
 <!DOCTYPE HTML>
 <html>
     <head>
-        <title>ABC (: or the automatic bert clustering machine :)</title>
+        <title>the (: ABC :) machine</title>
         
         <link rel="stylesheet" href="https://cdn.datatables.net/1.11.3/css/jquery.dataTables.min.css" />
         <link rel="stylesheet" href="https://cdn.datatables.net/select/1.3.3/css/select.dataTables.min.css" />
@@ -23,8 +23,11 @@
     <body>
         <nav id="menu">
             <a href="#" class="menubtn"><span></span></a>
-            <h1>ABC</h1>
-            <h2>(: or the automatic bert clustering machine :)</h2>
+            <div class="toolbar">
+                <h2>the</h2>
+                <h1>(: ABC :)</h1>
+                <h2>machine</h2>
+            </div>
             <div class="toolbar">
                 <a href="#" id="model_name">Unnamed</a>
             </div>
@@ -65,6 +68,7 @@
                         <a href="#" id="copy_selected">Copy selected</a>
                         <a href="#" id="move_selected">Move selected</a>
                         <a href="#" id="clean_dataset">Clear dataset</a>
+                        <a href="#" id="filter_dataset">Advance Filter</a>
                     </div>
                     <table id="dataset_table">
                         <thead>
@@ -87,6 +91,7 @@
                         <a href="#" id="table_view">Table view</a>
                         <a href="#" id="tree_view">Tree view</a>
                         <input type="text" id="group_search" placeholder="Filter" />
+                        <a href="#" id="filter_group">Advance filter</a>
                     </div>
                     <div class="horizontal_split">
                         <section id="group_charts">
@@ -134,6 +139,14 @@
                 <input class="dropzone_input" type="file" name="file_dataset" id="file_dataset" accept=".csv,.json,.sqlite,.sqlite3,.model">
             </div>
             <div id="upload_csv" style="display:none">
+                <p>
+                    <input type="checkbox" id="ignore_line" name="ignore_line" />
+                    <label for="ignore_line">Ignore <input type="number" id="ignore_line_count" default="1" /> lines</label>
+                </p>
+                <p>
+                    <input type="checkbox" id="has_comment" name="has_comment" />
+                    <label for="has_comment">Ignore #Comments</label>
+                </p>
                 <table id="dataset_preview">
                 </table>
             </div>
@@ -362,6 +375,10 @@
         </dialog>
         <dialog id="download_dialog" class="modal">
             <section>
+                <div class="toolbar">
+                    <a href="#" id="download_csv">Download datasets as csv</a>
+                    <a href="#" id="download_model">Download model</a>
+                </div>
             </section>
         </dialog>
         <dialog id="group_info_dialog" class="modal">
@@ -387,6 +404,51 @@
             <section>            
                 <div id="loading_bar"></div>
                 <div id="loading_msg"></div>
+            </section>
+        </dialog>
+        <dialog id="filter_dialog" class="modal">
+            <section>
+                <div class="toolbar">
+                    <a href="#" id="confirm_filter">Filter view</a>
+                    <a href="#" id="remove_filter">Remove filter</a>
+                </div>
+                <div class="formtable">
+                    <span>
+                        <input name="filter_by_text" id="filter_by_text" type="checkbox" />
+                        <label for="filter_by_text">Show with text</label>
+                        <input id="filter_text" type="text" />
+                    </span>
+                    <span>
+                        <input name="filter_by_ref" id="filter_by_ref" type="checkbox" />
+                        <label for="filter_by_ref">Show with reference</label>
+                        <input id="filter_ref" type="text" />
+                    </span>
+                    <span>
+                        <input name="filter_by_ts_before" id="filter_by_ts_before" type="checkbox" />
+                        <label for="filter_by_ts_before">Show Timestamp Before</label>
+                        <input id="filter_ts_before" type="text" />
+                    </span>
+                    <span>
+                        <input name="filter_by_ts_exact" id="filter_by_ts_exact" type="checkbox" />
+                        <label for="filter_by_ts_exact">Show Timestamp At</label>
+                        <input id="filter_ts_exact" type="text" />
+                    </span>
+                    <span>
+                        <input name="filter_by_ts_after" id="filter_by_ts_after" type="checkbox" />
+                        <label for="filter_by_ts_after">Show Timestamp After</label>
+                        <input id="filter_ts_after" type="text" />
+                    </span>
+                    <span>
+                        <input name="filter_by_predict" id="filter_by_predict" type="checkbox" />
+                        <label for="filter_by_predict">Show with predicted group</label>
+                        <input id="filter_predict" type="text" placeholder="(eg. 1,3,5-10)"/>
+                    </span>
+                    <span>
+                        <input name="filter_by_target" id="filter_by_target" type="checkbox" />
+                        <label for="filter_by_target">Show with target</label>
+                        <input id="filter_target" type="text" />
+                    </span>
+                </div>
             </section>
         </dialog>
         <a id="hb_groupinfo" href="#group_info_dialog" rel="modal:open" style="display: none">_</a>

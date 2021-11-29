@@ -280,8 +280,8 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
                 tpe.submit(model.load_dataset, **msg)
             elif msg["action"]=="save_to_csv":
                 tpe.submit(model.save_to_csv, **msg)
-            elif msg["action"]=="save_to_sqlite":
-                tpe.submit(model.save_to_sqlite, **msg)
+            # elif msg["action"]=="save_to_sqlite":
+            #     tpe.submit(model.save_to_sqlite, **msg)
             elif msg["action"]=="delete_row":
                 tpe.submit(model.delete_rows, **msg)
             elif msg["action"]=="clean_dataset":
@@ -354,7 +354,7 @@ def open_browser(port:int):
 if __name__ == "__main__":
     from os import makedirs
     makedirs("./saves/checkpoints", exist_ok=True)
-    print("Running...")
+    print("the (: ABC :) machine started!")
     app = make_app()
     signal.signal(signal.SIGTERM, sig_handler)
     signal.signal(signal.SIGINT, sig_handler)

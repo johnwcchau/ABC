@@ -77,6 +77,7 @@ class Model:
         self.group_stats = None
         self.group_summaries = None
         self.group_tree = None
+        self.group_ctree = None
     
     @classmethod
     def __newset(cls):
@@ -109,6 +110,7 @@ class Model:
             self.group_stats = None
             self.group_summaries = None
             self.group_tree = None
+            self.group_ctree = None
         self.log.finished("Datasets cleaned")
     
     def __delete_rows(self, **param):
@@ -274,20 +276,22 @@ class Model:
     
     @LockModel
     def save(self, filename:str):
-        # Do not save log as it is session dependent
-        log = self.log
-        self.log = None
         # Do not save embedding model as it is big and off-the-shelf
         embed_model = self.embedding_model
+        group_tree = self.group_tree
         self.embedding_model = (self.embedding_model is not None)
         self.group_tree = (self.group_tree is not None)
 
         try:
             with open(filename, 'wb') as file:
+                # Do not save log as it is session dependent
+                log = self.log
+                self.log = None
                 joblib.dump(self, file)
+                self.log = log
             # restore vars
-            self.log = log
             self.embedding_model = embed_model
+            self.group_tree = group_tree
             return True
         except Exception:
             traceback.print_exc()
@@ -314,9 +318,17 @@ class Model:
                 if col in param and not str(param[col]).startswith('fixed:'):
                     usecols.append(param[col])
                     names.append(col)
+            names = np.array(names)[np.argsort(usecols)]
+            usecols = np.sort(usecols)
             
+            print(usecols)
+            print(names)
             filename= param["filename"] if "filename" in param else "uploaded.csv"
-            df = pd.read_csv(filename, usecols=usecols, names=names, encoding='utf-8', header=None)
+            comment = None
+            skiprows = None
+            if 'comment' in param: comment = param['comment']
+            if 'skipfirst' in param: skiprows = int(param['skipfirst'])
+            df = pd.read_csv(filename, usecols=usecols, names=names, encoding='utf-8', header=None, comment=comment, skiprows=skiprows)
             
             for col in ['ts', 'ref', 'target', 'distance', 'predict', 'set']:
                 if col in param and str(param[col]).startswith('fixed:'):
@@ -328,7 +340,7 @@ class Model:
 
             if 'set' in df.columns:
                 self.devset = self.devset.append(df[df.set=='dev'].drop(columns=['set']), ignore_index=True)
-                self.trainset = self.trainset.append(df[df.set!='dev'].drop(columns=['set']), ignore_index=True)
+                self.trainset = self.trainset.append(df[df.set!='dev'].drop(columns=['set', 'distance']), ignore_index=True)
             else:
                 self.trainset = self.trainset.append(df, ignore_index=True)
             log.finished("Dataset loaded")
@@ -347,12 +359,12 @@ class Model:
             df = pd.read_json(filename, orient='index')
             columns = {}
             keepcolumn = []
-            for col in ['text', 'ts', 'ref', 'target', 'predict', 'set']:
+            for col in ['text', 'ts', 'ref', 'target', 'predict', 'distance', 'set']:
                 if col in param and not str(param[col]).startswith('fixed:'):
                     columns[param[col]] = col
                     keepcolumn.append(param[col])
                 df = df[keepcolumn].rename(columns = columns)
-            for col in ['ts', 'ref', 'target', 'predict', 'set']:
+            for col in ['ts', 'ref', 'target', 'predict', 'distance', 'set']:
                 if col in param and str(param[col]).startswith('fixed:'):
                     val = param[col].replace('fixed:', '')
                     df[col] = val
@@ -365,7 +377,7 @@ class Model:
                 return
             if 'set' in df.columns:
                 self.devset = self.devset.append(df[df.set=='dev'].drop(columns=['set']), ignore_index=True)
-                self.trainset = self.trainset.append(df[df.set!='dev'].drop(columns=['set']), ignore_index=True)
+                self.trainset = self.trainset.append(df[df.set!='dev'].drop(columns=['set', 'distance']), ignore_index=True)
             else:
                 self.trainset = self.trainset.append(df, ignore_index=True)
             
@@ -390,12 +402,12 @@ class Model:
             count = cur.fetchone()[0]
             log.working("Loading %d records" % count)
             sql = 'SELECT %s AS text' % (param['text'])
-            for col in ['embedding', 'umap', 'x', 'y', 'z', 'ts', 'ref', 'target', 'predict']:
+            for col in ['embedding', 'umap', 'x', 'y', 'z', 'ts', 'ref', 'target', 'predict', 'distance', 'set']:
                 if col in param and not str(param[col]).startswith('fixed:'):
                     sql += ', %s AS %s' % (param[col], col)
             sql += " FROM %s" % (table)
             df = pd.read_sql(sql, con)
-            for col in ['ts', 'ref', 'target', 'predict', 'set']:
+            for col in ['ts', 'ref', 'target', 'predict', 'distance', 'set']:
                 if col in param and str(param[col]).startswith('fixed:'):
                     val = param[col].replace('fixed:', '')
                     df[col] = val
@@ -403,7 +415,7 @@ class Model:
             df = df[df["text"].notna()]
             if 'set' in df.columns:
                 self.devset = self.devset.append(df[df.set=='dev'].drop(columns=['set']), ignore_index=True)
-                self.trainset = self.trainset.append(df[df.set!='dev'].drop(columns=['set']), ignore_index=True)
+                self.trainset = self.trainset.append(df[df.set!='dev'].drop(columns=['set', 'distance']), ignore_index=True)
             else:
                 self.trainset = self.trainset.append(df, ignore_index=True)
             log.finished("Dataset loaded")
@@ -431,42 +443,51 @@ class Model:
         dataset.dropna(subset=['text'], inplace=True)
         dataset.reset_index(drop=True, inplace=True)
         
-    @LockModel
-    def save_to_sqlite(self, filename:str=None, **kwargs):
-        log = self.log
-        if self.trainset.shape[0] == 0 and self.devset.shape[0] == 0:
-            log.error("Nothing to save")
-            return
+    # @LockModel
+    # def save_to_sqlite(self, filename:str=None, **kwargs):
+    #     log = self.log
+    #     if self.trainset.shape[0] == 0 and self.devset.shape[0] == 0:
+    #         log.error("Nothing to save")
+    #         return
 
-        if filename is None:
-            filename = 'saves/%s.sqlite3' % self.name
+    #     if filename is None:
+    #         filename = 'saves/%s.sqlite3' % self.name
 
-        try:
-            con = sqlite3.connect(filename, detect_types=sqlite3.PARSE_DECLTYPES)
-            dtypes = {
-                "embedding": "array",
-                "umap": "array"
-            }
-            self.trainset.to_sql("train", con, dtype=dtypes, if_exists='replace')
-            self.devset.to_sql("test", con, dtype=dtypes, if_exists='replace')
-            con.close()
-        except Exception:
-            traceback.print_exc()
-            log.error("Dataset save error")
+    #     try:
+    #         con = sqlite3.connect(filename, detect_types=sqlite3.PARSE_DECLTYPES)
+    #         dtypes = {
+    #             "embedding": "array",
+    #             "umap": "array"
+    #         }
+    #         self.trainset.to_sql("train", con, dtype=dtypes, if_exists='replace')
+    #         self.devset.to_sql("test", con, dtype=dtypes, if_exists='replace')
+    #         con.close()
+    #     except Exception:
+    #         traceback.print_exc()
+    #         log.error("Dataset save error")
 
     @LockModel
     def save_to_csv(self, filename:str=None, **kwargs):
         log = self.log
-        if self.trainset.shape[0] == 0:
-            log.error("Nothing to save")
-            return
+
         if filename is None:
-            filename = 'saves/%s.sqlite3' % self.name
+            filename = 'saves/%s.csv' % self.name
         
         log.working("Preparing dataset file, a moment...")
         try:
+            dataset = self.trainset.copy()
+            dataset['set'] = 'train'
+            devset = self.devset.copy()
+            devset['set'] = 'dev'
+            dataset = dataset.append(devset)
+            del devset
+
+            if dataset.shape[0] == 0:
+                log.error("Nothing to save")
+                return
             with open(filename, "w", encoding='utf8', newline='') as f:
-                self.trainset.to_csv(f, columns=["text", "ts", "ref", "target", "predict"], index=False)
+                f.write("#ABCExportv1\n")
+                dataset.to_csv(f, columns=["text", "ref", "ts", "target", "predict", "distance", "set"], index=False)
             log.finished("Dataset ready to be downloaded", {"path": filename})
         except Exception:
             traceback.print_exc()
@@ -689,57 +710,49 @@ class Model:
 
             log.working("Creating tree and graphs...")
             
-            return self.__create_group_tree()
+            return self.__create_group_ctree()
             
         except Exception:
             traceback.print_exc()
             log.error("Summary generation failed")
             return False
 
-    # DO NOT use log.finish as this is inner private function with no busy flag rights!
-    def __create_group_tree(self):
-        group_summary = self.group_summaries
-        group_counts = group_summary['count']
+    def __create_group_ctree(self):
         try:
-            if group_summary is None:
-                return False
-            try:
-                cache = self.clustering_model.condensed_tree_
-            except Exception:
-                self.create_clustering_model()
-                self.do_clustering()
-                cache = self.clustering_model.condensed_tree_
-            treedf = cache.to_pandas()
+            group_summaries = self.group_summaries
+            ctree = self.clustering_model.condensed_tree_.to_pandas()
             # sel contains one text sample per group
-            sel = treedf[treedf.child_size==1].groupby("parent").first()
+            sel = ctree[ctree.child_size==1].groupby("parent").first()
             # s2 contains all nodes and group-leaves
-            s2 = treedf[treedf.child_size > 1].copy()
-
-            #
+            s2 = ctree[ctree.child_size > 1].copy()
             # put real group number into pd frame
-            #
             def applygroup(x):
                 s2.loc[s2.child==int(x.name), "group"] = self.trainset.iloc[int(x.child)]["predict"]
             sel.apply(applygroup, axis=1)
-
-            #
-            # remove -1 group or repeated groups
-            # Note: repeated groups are trimmed branches
-            #
+            # remove -1 group
+            s2.loc[s2.group==-1, "group"] = np.nan
             def nullgroup(x):
                 s2.loc[s2.child==x, "group"] = np.nan
-            s2.loc[s2.group==-1, "group"] = np.nan
-            for i in range(group_counts.shape[0]):
+            for i in range(group_summaries.shape[0]):
+                # remove repeated groups
                 s3 = s2[s2.group==i]["child"].sort_values()
                 if s3.count() > 1:
                     s3.iloc[1:].apply(nullgroup)
+                # add stats
+                s2.loc[s2.group==i, "repr_text"] = group_summaries.at[i, "repr_text"]
+            
+            self.group_ctree = s2
+            return True
+        except Exception:
+            traceback.print_exc()
+            self.group_ctree = None
+            self.log.error("CTree generation failed")
+            return False
 
-            #
-            # top bottom to build the tree
-            # Note: s2 should be a table sorted top-bottom by default
-            #
+    def __generate_group_tree_from_ctree(self):
+        try:
+            s2 = self.group_ctree
             cache = {}  # cache for a recusive tree
-            condensed = []  # list for a condensed tree
             def topbottom(x):
                 #
                 # find parent
@@ -749,7 +762,6 @@ class Model:
                     node = {"id": -parentid, "children": []}
                     cache[parentid] = node
                     self.group_tree = node
-                    condensed.append({"id": -parentid, "parent": None})
                 parent = cache[parentid]
 
                 # 
@@ -760,11 +772,6 @@ class Model:
                     "count": int(x.child_size),
                     # "lambda": float(x.lambda_val)
                 }
-                cnode = {
-                    # "id": int(x.child),
-                    "count": int(x.child_size),
-                    'parent': -int(x.parent),
-                }
                 # add node to cache
                 cache[int(x.child)] = node
                 if 'children' not in parent:  # this is a trimmed node, skip it
@@ -772,29 +779,123 @@ class Model:
                 if not np.isnan(x.group):
                     group = int(x.group)
                     node["id"] = group
-                    node["label"] = "[%d] %s" % (group, group_summary.loc[group, "repr_text"])
-                    cnode['id'] = group
-                    cnode['label'] = node["label"]
+                    node["label"] = "[%d] %s" % (group, x.repr_text)
                 else:
                     lamda = float(x.lambda_val)
                     node["id"] = -int(x.child)
                     node["label"] = "[%d] %f" % (int(x.child), lamda)
                     node["children"] = []
-                    cnode['id'] = node["id"]
-                    cnode['label'] = node["label"]
                 # if "children" in parent:
                 parent["children"].append(node)
-                condensed.append(cnode)
 
             s2.apply(topbottom, axis=1)
-
-            del cache
             return True
         except Exception:
             traceback.print_exc()
             self.group_tree = None
             self.log.error("Tree generation failed")
             return False
+
+
+    # # DO NOT use log.finish as this is inner private function with no busy flag rights!
+    # def __create_group_tree(self):
+    #     group_summary = self.group_summaries
+    #     group_counts = group_summary['count']
+    #     try:
+    #         if group_summary is None:
+    #             return False
+    #         try:
+    #             cache = self.clustering_model.condensed_tree_
+    #         except Exception:
+    #             self.create_clustering_model()
+    #             self.do_clustering()
+    #             cache = self.clustering_model.condensed_tree_
+    #         treedf = cache.to_pandas()
+    #         # sel contains one text sample per group
+    #         sel = treedf[treedf.child_size==1].groupby("parent").first()
+    #         # s2 contains all nodes and group-leaves
+    #         s2 = treedf[treedf.child_size > 1].copy()
+
+    #         #
+    #         # put real group number into pd frame
+    #         #
+    #         def applygroup(x):
+    #             s2.loc[s2.child==int(x.name), "group"] = self.trainset.iloc[int(x.child)]["predict"]
+    #         sel.apply(applygroup, axis=1)
+
+    #         #
+    #         # remove -1 group or repeated groups
+    #         # Note: repeated groups are trimmed branches
+    #         #
+    #         def nullgroup(x):
+    #             s2.loc[s2.child==x, "group"] = np.nan
+    #         s2.loc[s2.group==-1, "group"] = np.nan
+    #         for i in range(group_counts.shape[0]):
+    #             s3 = s2[s2.group==i]["child"].sort_values()
+    #             if s3.count() > 1:
+    #                 s3.iloc[1:].apply(nullgroup)
+
+    #         #
+    #         # top bottom to build the tree
+    #         # Note: s2 should be a table sorted top-bottom by default
+    #         #
+    #         cache = {}  # cache for a recusive tree
+    #         condensed = []  # list for a condensed tree
+    #         def topbottom(x):
+    #             #
+    #             # find parent
+    #             # 
+    #             parentid = int(x.parent)
+    #             if parentid not in cache:
+    #                 node = {"id": -parentid, "children": []}
+    #                 cache[parentid] = node
+    #                 self.group_tree = node
+    #                 condensed.append({"id": -parentid, "parent": None})
+    #             parent = cache[parentid]
+
+    #             # 
+    #             # add to parent as child
+    #             #
+    #             node = {
+    #                 # "id": int(x.child),
+    #                 "count": int(x.child_size),
+    #                 # "lambda": float(x.lambda_val)
+    #             }
+    #             cnode = {
+    #                 # "id": int(x.child),
+    #                 "count": int(x.child_size),
+    #                 'parent': -int(x.parent),
+    #             }
+    #             # add node to cache
+    #             cache[int(x.child)] = node
+    #             if 'children' not in parent:  # this is a trimmed node, skip it
+    #                 return
+    #             if not np.isnan(x.group):
+    #                 group = int(x.group)
+    #                 node["id"] = group
+    #                 node["label"] = "[%d] %s" % (group, group_summary.loc[group, "repr_text"])
+    #                 cnode['id'] = group
+    #                 cnode['label'] = node["label"]
+    #             else:
+    #                 lamda = float(x.lambda_val)
+    #                 node["id"] = -int(x.child)
+    #                 node["label"] = "[%d] %f" % (int(x.child), lamda)
+    #                 node["children"] = []
+    #                 cnode['id'] = node["id"]
+    #                 cnode['label'] = node["label"]
+    #             # if "children" in parent:
+    #             parent["children"].append(node)
+    #             condensed.append(cnode)
+
+    #         s2.apply(topbottom, axis=1)
+
+    #         del cache
+    #         return True
+    #     except Exception:
+    #         traceback.print_exc()
+    #         self.group_tree = None
+    #         self.log.error("Tree generation failed")
+    #         return False
 
     @LockModel
     def train(self, **param):
@@ -817,6 +918,7 @@ class Model:
         if "reset_summarize" in param and param["reset_summarize"]:
             self.group_summaries = None
             self.group_stats = None
+            self.group_ctree = None
             self.group_tree = None
 
         if not "embedding" in param or param["embedding"]:
@@ -858,7 +960,7 @@ class Model:
         self.log.finished("Testing result ready")
 
     @LockModel
-    def adhoc_predict(self, texts:list, **kwargs):
+    def adhoc_predict(self, texts:list = None, detailed:bool = False, embeddings:list = None, **kwargs):
         log = self.log
         if self.embedding_model is None:
             log.invalid("Create embedding model first")
@@ -872,17 +974,22 @@ class Model:
         if self.group_summaries is None:
             log.invalid("Generate group summaries first")
             return
+        if texts is None and embeddings is None:
+            log.invalid("No input")
+            return
         try:
-            log.working("Creating embeddings...")
-            embeddings = self.embedding_model.encode(texts)
+            if embeddings is None:
+                log.working("Creating embeddings...")
+                embeddings = self.embedding_model.encode(texts)
             log.working("Dimension reduction...")
             umaps = self.reduction_model.transform(embeddings)
-            from pprint import pprint
-            pprint(umaps)
-            xyzs = self.projection_model.transform(umaps)
-            xs = xyzs[:, 0]
-            ys = xyzs[:, 1]
-            #zs = xyzs[:, 2]
+            #from pprint import pprint
+            #pprint(umaps)
+            if detailed:
+                xyzs = self.projection_model.transform(umaps)
+                xs = xyzs[:, 0]
+                ys = xyzs[:, 1]
+                #zs = xyzs[:, 2]
             log.working("Clustering...")
             #
             # 2 aproaches:
@@ -906,22 +1013,23 @@ class Model:
             dists = dists[:, :3]
             predicts = [ranks[i][0] if dists[i][0] <= self.group_summaries.loc[ranks[i][0], "distance"] else -1 for i in range(len(texts))]
 
-            adhocset = pd.DataFrame({'text': texts, 'x': xs, 'y': ys, 
-                #'z': zs, 
-                'predict': predicts})
-            adhocset["embedding"] = np.nan
-            adhocset['umap'] = np.nan
-            adhocset["embedding"] = adhocset["embedding"].astype(object)
-            adhocset["umap"] = adhocset["umap"].astype(object)
-            for i in range(len(texts)):
-                adhocset.at[i, 'embedding'] = embeddings[i]
-                adhocset.at[i, 'umap'] = umaps[i]
-            self.adhocset = adhocset
-            #
-            # for predict_from_distance
-            #     put in probabilites
-            adhocset[['choice1', 'choice2', 'choice3']] = ranks
-            adhocset[['distance', 'distance2', 'distance3']] = dists
+            if detailed:
+                adhocset = pd.DataFrame({'text': texts, 'x': xs, 'y': ys, 
+                    #'z': zs, 
+                    'predict': predicts})
+                adhocset["embedding"] = np.nan
+                adhocset['umap'] = np.nan
+                adhocset["embedding"] = adhocset["embedding"].astype(object)
+                adhocset["umap"] = adhocset["umap"].astype(object)
+                for i in range(len(texts)):
+                    adhocset.at[i, 'embedding'] = embeddings[i]
+                    adhocset.at[i, 'umap'] = umaps[i]
+                self.adhocset = adhocset
+                #
+                # for predict_from_distance
+                #     put in probabilites
+                adhocset[['choice1', 'choice2', 'choice3']] = ranks
+                adhocset[['distance', 'distance2', 'distance3']] = dists
             
             # # for approximate_predict:
             # #     calculate your own distances
@@ -931,7 +1039,9 @@ class Model:
             #     adhocset.loc[x.name, 'distance'] = dist
             # adhocset[adhocset.predict != -1].apply(dist, axis=1)
 
-            log.finished("Result ready")
+            log.finished("Result ready", {
+                'predicts': ranks[:, 0].tolist()
+            })
         except Exception:
             traceback.print_exc()
             log.error("Something wrong")
@@ -940,7 +1050,11 @@ class Model:
     @LockModel
     def read_train_result(self, **kwargs):
         log = self.log
-        if self.group_summaries is not None and self.group_tree is not None:
+        if self.group_summaries is not None and self.group_ctree is not None:
+            if self.group_tree is None:
+                if not self.__generate_group_tree_from_ctree():
+                    log.invalid("Generating group tree failed, your train result may be corrupted, please retrain.")
+                    return
             log.finished(param={
                 "stats": {
                     "num_group": int(self.group_stats["num_group"]),
@@ -995,7 +1109,7 @@ if __name__ == "__main__":
 # %%
     log = Logger()
     log.log = iceptLog
-    model = Model.load(log, "saves/checkpoints/Trump.model")
+    model = Model.load(log, "saves/model.model")
 # %%
     model = Model()
     model.log.log = iceptLog

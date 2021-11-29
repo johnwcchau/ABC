@@ -642,24 +642,41 @@ csv_preview = (file, table) => {
     table.empty(); // clean table
     reader = new FileReader();
     reader.onload = () => {
-        lines = $.csv.toArrays(reader.result).slice(0, 5);
-        numitems = lines[0].length;
-        thead = $('<thead/>').appendTo(table);
-        tr = $("<tr/>").appendTo(thead);
+        let alllines = $.csv.toArrays(reader.result);
+        let line0 = alllines[0];
+        let abcexport = line0[0] == "#ABCExportv1";
+        let linefrom;
+        if (abcexport)
+            linefrom = 2;
+        else
+            linefrom = 0;
+        let lines;
+        lines = alllines.slice(linefrom, linefrom+5);
+        let numitems = lines[0].length;
+        let thead = $('<thead/>').appendTo(table);
+        let tr = $("<tr/>").appendTo(thead);
         for (i = 0; i < numitems; i++) {
-            $("<th/>").html(`
+            $th = $("<th/>").html(`
             <select class="dataset_rowtype" style="width: 100%;" data-idx="` + i + `">
-                <option value='ignore' selected>Ignore</option>
+                <option value='ignore'>Ignore</option>
                 <option value='text'>Text</option>
                 <option value='ref'>Reference</option>
                 <option value='ts'>Timestamp</option>
                 <option value='target'>Target</option>
                 <option value='predict'>Predicted</option>
-            </select>`).appendTo(tr);
+                <option value='distance'>Distance</option>
+                <option value='set'>Set</option>
+            </select>`);
+            if (abcexport) {
+                $th.find("option:nth(" + (i+1) + ")").prop("selected", true);
+            } else {
+                $th.find("option:first").prop("selected", true);
+            }
+            $th.appendTo(tr);
         }
-        tbody = $('<tbody/>').appendTo(table);
+        let tbody = $('<tbody/>').appendTo(table);
         for (i = 0; i < lines.length; i++) {
-            tr = $("<tr/>").appendTo(tbody);
+            let tr = $("<tr/>").appendTo(tbody);
             for (j = 0; j < numitems; j++) {
                 try {
                     $("<td/>").html(lines[i][j].trim()).appendTo(tr);
@@ -667,6 +684,11 @@ csv_preview = (file, table) => {
                     $("<td/>").appendTo(tr);
                 }
             }
+        }
+        if (abcexport) {
+            $("#has_comment").prop("checked", true);
+            $("#ignore_line").prop("checked", true);
+            $("#ignore_line_count").val(2);
         }
     }
     reader.readAsBinaryString(file.slice(0, 16384)); //16K preview
@@ -683,7 +705,15 @@ do_upload_csv = (f) => {
         else if ($(v).val()=="predict") _param["predict"] = $(v).data("idx");
         else if ($(v).val()=="ts") _param["ts"] = $(v).data("idx");
         else if ($(v).val()=="ref") _param["ref"] = $(v).data("idx");
+        else if ($(v).val()=="distance") _param["distance"] = $(v).data("idx");
+        else if ($(v).val()=="set") _param["set"] = $(v).data("idx");
     })
+    if ($("#has_comment").prop("checked")) {
+        _param["comment"] = "#";
+    }
+    if ($("#ignore_line").prop("checked")) {
+        _param["skipfirst"] = $("#ignore_line_count").val();
+    }
     if ((_param["text"] === null)||(_param["text"] < 0)) {
         log("err", 'Please select at least the text column');
         return;
@@ -715,6 +745,7 @@ json_preview = (file, table) => {
                 <option value='ts'>Timestamp</option>
                 <option value='target'>Target</option>
                 <option value='predict'>Predicted</option>
+                <option value='distance'>Distance</option>
             </select>`).appendTo(tr);
         }
         tbody = $('<tbody/>').appendTo(table);
@@ -742,6 +773,7 @@ do_upload_json = (f) => {
         else if ($(v).val()=="predict") _param["predict"] = $(v).data("idx");
         else if ($(v).val()=="ts") _param["ts"] = $(v).data("idx");
         else if ($(v).val()=="ref") _param["ref"] = $(v).data("idx");
+        else if ($(v).val()=="distance") _param["distance"] = $(v).data("idx");
     })
     if ((_param["text"] === null)||(_param["text"] < 0)) {
         log("err", 'Please select at least the text column');
@@ -857,6 +889,45 @@ check_group = (group_id) => {
         "group": group_id,
     }
     send_action("get_group_info", params);
+}
+//#endregion
+
+//#region Filter and search
+create_filter_string = () => {
+    var filterstr = [];
+    ["text", "ref", "ts_before", "ts_exact", "ts_after", "predict", "target"].forEach((v) => {
+        if ($("#filter_by_" + v).prop("checked")) {
+            val = $("#filter_" + v).val();
+            if (!val) return;
+            if (v == "text") {
+                filterstr.push(val);
+            } else if (v == "ts_before") {
+                filterstr.push("ts:<" + val);
+            } else if (v == "ts_exact") {
+                filterstr.push("ts:" + val);
+            } else if (v == "ts_after") {
+                filterstr.push("ts:>" + val);
+            } else 
+                filterstr.push(v + ":" + val);
+        }
+    });
+    return filterstr.join("&&");
+}
+do_group_search = () => {
+    if (handler) return;
+    handler = {
+        success: (r) => {
+            handler = null;
+            group_filter = r["groups"];
+            $("#groups_table").DataTable().draw(); //will search
+            filter_group_tree();
+            create_group_count_table('groupcount', {"idx": group_filter});
+        }
+    }
+    text = $("#group_search").val();
+    send_action("group_search", {
+        "filter": text
+    });
 }
 //#endregion
 
@@ -1282,6 +1353,30 @@ init = function() {
     
 //#endregion
 
+//#region Filter dialog
+    $("#remove_filter").click(()=>{
+        ["text", "ref", "ts_before", "ts_exact", "ts_after", "predict", "target"].forEach((v)=>{
+            $("#filter_by_" + v).prop("checked", false);
+        });
+    });
+    $("#filter_dataset").click(() => {
+        $("#confirm_filter").off("click").click(()=> {
+            $.modal.close();
+            $("#dataset_table_filter input").val(create_filter_string());
+            $("#dataset_table").DataTable().draw();
+        });
+        $("#filter_dialog").modal();
+    });
+    $("#filter_group").click(() => {
+        $("#confirm_filter").off("click").click(()=> {
+            $.modal.close();
+            $("#group_search").val(create_filter_string());
+            do_group_search();
+        });
+        $("#filter_dialog").modal();
+    });
+//#endregion
+
 //#region Upload dialog
 
      $("#file_dataset").change(() => {
@@ -1588,6 +1683,7 @@ init = function() {
         };
         param = {
             'texts': texts.split("\n"),
+            'detailed': true,
         }
         send_action("predict", param);
     });
@@ -1596,23 +1692,11 @@ init = function() {
 //#region group search
     $("#groups_table_filter").hide();
     $("#group_search").change(() => {
-        if (handler) return;
-        handler = {
-            success: (r) => {
-                handler = null;
-                group_filter = r["groups"];
-                $("#groups_table").DataTable().draw(); //will search
-                filter_group_tree();
-                create_group_count_table('groupcount', {"idx": group_filter});
-            }
-        }
-        text = $("#group_search").val();
-        send_action("group_search", {
-            "filter": text
-        });
+        do_group_search();
     })
 //#endregion
 
+//#region download
     $("#download_model").click(() => {
         if (handler) return;
         handler = {
@@ -1623,7 +1707,7 @@ init = function() {
         };
         send_action("save_model");
     });
-    $("#download_dataset").click(() => {
+    $("#download_csv").click(() => {
         if (handler) return;
         handler = {
             "success": (r) => {
@@ -1631,18 +1715,9 @@ init = function() {
                 download(r["path"]);
             }
         };
-        send_action("save_dataset");
+        send_action("save_to_csv");
     });
-    $("#download_sqlite").click(() => {
-        if (handler) return;
-        handler = {
-            "success": (r) => {
-                handler = null;
-                download(r["path"]);
-            }
-        };
-        send_action("save_ds_to_sqlite");
-    });
+//#endregion
 
 //#region Training result view
     $("#table_view").click(() => {
@@ -1694,7 +1769,7 @@ init = function() {
         $("#logs").html('<input type="button" name="log_clear" id="log_clear" value="Clear Log" />');
     });
 
-    //#region checkpoints
+//#region checkpoints
     $("#save_checkpoint").click(()=>{
         if (handler) return;
         handler = {};
@@ -1759,7 +1834,7 @@ init = function() {
         }
         send_action("new_model");
     })
-    //#endregion
+//#endregion
 
     // lazy load model summary if any
     setTimeout(()=> {
