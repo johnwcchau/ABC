@@ -110,7 +110,49 @@ filter_group = (row, filter) => {
     return true;
 }
 
+//#region Vis Toolbar
+get_visfilter_text = () => {
+    var text_filter = $("#visualizepane .toolbar #visfilter_text");
+    if (text_filter.length == 0) {
+        text_filter = $("<input type='text' id='visfilter_text' placeholder='Filter (Enter to apply)'>");
+        text_filter.appendTo($("#visualizepane .toolbar"));
+    } 
+    return text_filter;
+}
+create_advance_filter_button = (onApply) => {
+    var btn = $('<a href="#" id="filter_group">Advance filter</a>');
+    btn.click(() => {
+        $("#confirm_filter").off("click").click(onApply);
+        $("#filter_dialog").modal();
+    });
+    btn.appendTo($("#visualizepane .toolbar"));
+}
+//#endregion
+
 //#region visualize scatter
+scatter_server_filter = () => {
+    if (handler) return;
+    handler = {
+        success: (r) => {
+            handler = null;
+            group_filter = r.groups;
+            vis_data = {
+                "train": r.train,
+                "dev": r.dev,
+            }
+            create_scatter_table();
+            hide_loading_dialog();
+        }
+    }
+    let text = $("#visfilter_text").val();
+    let hideFiltered = $("#visfilter_hide_filtered").length ? $("#visfilter_hide_filtered").prop("checked") : true;
+    loading_dialog("Loading data...");
+    send_action("text_summary", {
+        "filter": text,
+        "hidefiltered": hideFiltered,
+    });
+}
+
 create_scatter_table = (filterStr) => {
     //try to load data from server and restart
     if (!vis_data || !(vis_data["train"] && summary_table)) {
@@ -118,6 +160,11 @@ create_scatter_table = (filterStr) => {
         let text_filter = $("<input type='text' id='visfilter_text' placeholder='Filter (Enter to apply)'>");
         text_filter.val(filterStr).appendTo(toolbar);
         $("#visualize_scatters").click();
+        return;
+    }
+    if (filterStr) {
+        get_visfilter_text().val(filterStr);
+        scatter_server_filter();
         return;
     }
     var x = [];
@@ -136,24 +183,25 @@ create_scatter_table = (filterStr) => {
     let showAdhocs = $("#visfilter_show_adhocs").length ? $("#visfilter_show_adhocs").prop("checked") : true;
     let hideFiltered = $("#visfilter_hide_filtered").length ? $("#visfilter_hide_filtered").prop("checked") : true;
 
-    let t;
-    if (filterStr) {
-        t = filterStr;
-    } else {
-        t = $("#visfilter_text").val();
-    }
-    if (t && t.startsWith("predict:")) {
-        let idx = t.replace("predict:", "");
-        filter = {"idx": idx};
-    } else {
-        filter = {"text": t};
-    }
+    // let t;
+    // if (filterStr) {
+    //     t = filterStr;
+    // } else {
+    //     t = $("#visfilter_text").val();
+    // }
+    // if (t && t.startsWith("predict:")) {
+    //     let idx = t.replace("predict:", "");
+    //     filter = {"idx": idx};
+    // } else {
+    //     filter = {"text": t};
+    // }
     
     $("#tb_visualize").click();
     
     if (showgroups && summary_table != null) {
         summary_table.forEach((v, _) => {
-            not_filtered = filter_group({"idx": v.group, "text": v.repr_text}, filter);
+            not_filtered = group_filter.indexOf(v.group) != -1;
+            //not_filtered = filter_group({"idx": v.group, "text": v.repr_text}, filter);
             if (!not_filtered && hideFiltered) return;
             x.push(v.x);
             y.push(v.y);
@@ -173,8 +221,8 @@ create_scatter_table = (filterStr) => {
     }
     if (showTrains && (vis_data != null) && (vis_data["train"] != null)) {
         vis_data["train"].forEach((v, _) => {
-            not_filtered = filter_group({"idx": v.predict, "text": v.text}, filter);
-            if (!not_filtered && hideFiltered) return;
+            //not_filtered = filter_group({"idx": v.predict, "text": v.text}, filter);
+            //if (!not_filtered && hideFiltered) return;
             x.push(v.x);
             y.push(v.y);
             //z.push(v.z);
@@ -188,7 +236,8 @@ create_scatter_table = (filterStr) => {
                 g.push('#aaa');
             } else {
                 color = mix_color_hsv(c1, c2, v.predict / summary_table.length);
-                if (not_filtered)
+                //if (not_filtered)
+                if (!v.filtered)
                     g.push(color);
                 else 
                     g.push('#ddd');
@@ -197,8 +246,8 @@ create_scatter_table = (filterStr) => {
     }
     if (showTests && (vis_data != null) && (vis_data["dev"] != null)) {
         vis_data["dev"].forEach((v, _) => {
-            not_filtered = filter_group({"idx": v.predict, "text": v.text}, filter);
-            if (!not_filtered && hideFiltered) return;
+            //not_filtered = filter_group({"idx": v.predict, "text": v.text}, filter);
+            //if (!not_filtered && hideFiltered) return;
             x.push(v.x);
             y.push(v.y);
             s.push(3);
@@ -211,7 +260,8 @@ create_scatter_table = (filterStr) => {
                 g.push('#aaa');
             } else {
                 color = mix_color_hsv(c1, c2, v.predict / summary_table.length);
-                if (not_filtered)
+                //if (not_filtered)
+                if (!v.filtered)
                     g.push(color);
                 else 
                     g.push('#ddd');
@@ -220,8 +270,8 @@ create_scatter_table = (filterStr) => {
     }
     if (showAdhocs && (predict_result != null)) {
         predict_result.forEach((v, _) => {
-            not_filtered = filter_group({"idx": v.choice1, "text": v.text}, filter);
-            if (!not_filtered && hideFiltered) return;
+            //not_filtered = filter_group({"idx": v.choice1, "text": v.text}, filter);
+            //if (!not_filtered && hideFiltered) return;
             x.push(v.x);
             y.push(v.y);
             //z.push(v.z);
@@ -229,10 +279,10 @@ create_scatter_table = (filterStr) => {
             o.push(1);
             m.push(['Adhoc', v.text, 'group', v.choice1, 'Distance', v.distance]);
             color = mix_color_hsv(c1, c2, v.choice1 / summary_table.length);
-            if (not_filtered)
+            //if (not_filtered)
                 g.push(color);
-            else 
-                g.push('#ddd');
+            //else 
+            //    g.push('#ddd');
         });
     }
     var data = [{
@@ -275,26 +325,42 @@ create_scatter_table = (filterStr) => {
         });
         
         let toolbar = $("#visualizepane .toolbar").html("");
-        let text_filter = $("<input type='text' id='visfilter_text' placeholder='Filter (Enter to apply)'>");
+        let text_filter = get_visfilter_text();
         text_filter.keydown((e) => {
             if ((e.keyCode == 13)||(e.originalEvent.keyCode == 13))
-                create_scatter_table();
+                scatter_server_filter();
         });
-        text_filter.appendTo(toolbar);
+        create_advance_filter_button(()=> {
+            get_visfilter_text().val(create_filter_string());
+            scatter_server_filter();
+        });
         ['show_groups', 'show_trains', 'show_tests', 'show_adhocs', 'hide_filtered'].forEach((v, _) => {
             let chkbox = $("<input type='checkbox' name='visfilter_" + v + "' id='visfilter_" + v + "' checked>");
             chkbox.change((e) => {
-                create_scatter_table();
+                scatter_server_filter();
             });
             chkbox.appendTo(toolbar);
             $("<label for-'visfilter_" + v + "'>" + v.replace("_", " ") + "</label>").appendTo(toolbar);
         })
     }
-    if (t) $("#visfilter_text").val(t);
 }
 //#endregion
 
 //#region visualize group over time
+timeline_server_filter = () => {
+    if (handler) return;
+    handler = {
+        success: (r) => {
+            handler = null;
+            group_filter = r["groups"];
+            create_timeline();
+        }
+    }
+    text = $("#visfilter_text").val();
+    send_action("group_search", {
+        "filter": text
+    });
+}
 create_timeline = (filterStr) => {
     //load data from server side first
     if (!vis_data || !vis_data["counts"]) {
@@ -304,23 +370,14 @@ create_timeline = (filterStr) => {
         $("#visualize_timeline").click();
         return;
     }
-    let t;
     if (filterStr) {
-        t = filterStr;
-    } else {
-        t = $("#visfilter_text").val();
-    }
-    let filter;
-    if (t && t.startsWith("predict:")) {
-        let idx = t.replace("predict:", "");
-        filter = {"idx": idx};
-    } else {
-        filter = {"text": t};
+        get_visfilter_text().val(filterStr);
+        timeline_server_filter();
+        return;
     }
     var data = [];
     vis_data["counts"].forEach((v, _) => {
-        not_filtered = filter_group({"idx": v["idx"], "text": v["text"]}, filter);
-        if (!not_filtered) return;
+        if (group_filter && (group_filter.indexOf(v.idx) == -1)) return;
         data.push({
             x: v.x,
             y: v.y,
@@ -348,40 +405,62 @@ create_timeline = (filterStr) => {
             }
         });
         
-        let toolbar = $("#visualizepane .toolbar").html("");
-        let text_filter = $("<input type='text' id='visfilter_text' placeholder='Filter (Enter to apply)'>");
+        $("#visualizepane .toolbar").html("");
+        let text_filter = get_visfilter_text();
         text_filter.keydown((e) => {
-            if ((e.keyCode == 13)||(e.originalEvent.keyCode == 13))
-                create_timeline();
+            if ((e.keyCode == 13)||(e.originalEvent.keyCode == 13)) {
+                timeline_server_filter();
+            }
         });
-        text_filter.appendTo(toolbar);
+        create_advance_filter_button(() => {
+            get_visfilter_text().val(create_filter_string());
+            timeline_server_filter();
+        })
     }
-    if (t) $("#visfilter_text").val(t);
 
 }
 //#endregion
 
 //#region visualize group_count
-visualize_group_count = (filter) => {
-    create_group_count_table("visualization_chart", filter);
-    let text_filter = $("<input type='text' id='visfilter_group_text' placeholder='filter'>");
-    text_filter.keydown(() => {
-        let t = $("#visfilter_group_text").val();
-        if (t.startsWith("predict:")) {
-            let idx = t.replace("predict:", "");
-            let filter = {"idx": idx};
-            create_group_count_table("visualization_chart", filter);
-        } else {
-            let filter = {"text": t};
-            create_group_count_table("visualization_chart", filter);
+groupcount_server_filter = () => {
+    if (handler) return;
+    handler = {
+        success: (r) => {
+            handler = null;
+            group_filter = r["groups"];
+            visualize_group_count();
         }
+    }
+    text = $("#visfilter_text").val();
+    send_action("group_search", {
+        "filter": text
     });
-    $("#visualizepane .toolbar").html("");
-    text_filter.appendTo($("#visualizepane .toolbar"));
-    $("#tb_visualize").click();
+}
+visualize_group_count = (filter) => {
+    if (filter) {
+        get_visfilter_text().val(filter);
+        groupcount_server_filter();
+        return;
+    }
+    current_graph = $("#visualization_chart").data("current_graph");
+    create_group_count_table("visualization_chart");
+    if (current_graph != "group_count") {
+        $("#tb_visualize").click();
+        $("#visualizepane .toolbar").html("");
+        let text_filter = get_visfilter_text();
+        text_filter.keydown((e) => {
+            if ((e.keyCode == 13)||(e.originalEvent.keyCode == 13)) {
+                groupcount_server_filter();
+            }
+        });
+        create_advance_filter_button(() => {
+            get_visfilter_text().val(create_filter_string());
+            groupcount_server_filter();
+        })
+    }
 }
 
-create_group_count_table = (tgt, filter) => {
+create_group_count_table = (tgt) => {
     let count_table = summary_table.sort((a, b) => {return a.count < b.count});
     var x = [];
     var y = [];
@@ -391,10 +470,14 @@ create_group_count_table = (tgt, filter) => {
         x.push(i);
         y.push(v.count);
         m.push([v.group, v.repr_text]);
-        if (filter_group({"idx": v.group, "text": v.repr_text}, filter))
-            g.push('#88f');
-        else 
+        if (group_filter && group_filter.indexOf(v.group) == -1)
             g.push('#ddd');
+        else
+            g.push('#88f');
+        // if (filter_group({"idx": v.group, "text": v.repr_text}, filter))
+        //     g.push('#88f');
+        // else 
+        //     g.push('#ddd');
     });
     var data = [{
         x: x,
@@ -921,7 +1004,7 @@ do_group_search = () => {
             group_filter = r["groups"];
             $("#groups_table").DataTable().draw(); //will search
             filter_group_tree();
-            create_group_count_table('groupcount', {"idx": group_filter});
+            create_group_count_table('groupcount');
         }
     }
     text = $("#group_search").val();
@@ -1362,8 +1445,7 @@ init = function() {
     $("#filter_dataset").click(() => {
         $("#confirm_filter").off("click").click(()=> {
             $.modal.close();
-            $("#dataset_table_filter input").val(create_filter_string());
-            $("#dataset_table").DataTable().draw();
+            $("#dataset_table").DataTable().search(create_filter_string()).draw();
         });
         $("#filter_dialog").modal();
     });
@@ -1735,20 +1817,22 @@ init = function() {
         visualize_group_count();
     });
     $("#visualize_scatters").click(() => {
-        if (handler != null) return;
-        handler = {
-            success: (r) => {
-                handler = null;
-                vis_data = {
-                    "train": r.train,
-                    "dev": r.dev,
-                }
-                //loading_dialog("Rendering");
-                create_scatter_table();
-                //hide_loading_dialog();
-            }
-        }
-        send_action("text_summary");
+        // if (handler != null) return;
+        // handler = {
+        //     success: (r) => {
+        //         handler = null;
+        //         vis_data = {
+        //             "train": r.train,
+        //             "dev": r.dev,
+        //         }
+        //         //loading_dialog("Rendering");
+        //         create_scatter_table();
+        //         //hide_loading_dialog();
+        //     }
+        // }
+        // send_action("text_summary");
+        
+        scatter_server_filter();
     });
     $("#visualize_timeline").click(() => {
         if (handler != null) return;

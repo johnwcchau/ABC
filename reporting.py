@@ -1,3 +1,4 @@
+#%%
 import pandas as pd
 from pandas.core.frame import DataFrame
 from model import Model, LockModel
@@ -28,11 +29,22 @@ def formatnums(str):
 
 def filter_dataset(dataset: DataFrame, criteria:str=''):
     try:
+        if criteria is None: return dataset
         criterias = criteria.split("&&")
         for criteria in criterias:
             criteria = criteria.strip()
             if criteria.startswith('ts:'):
-                dataset = dataset[dataset.ts==criteria.replace('ts:', '').strip()]
+                criteria = criteria.replace("ts:", "").split(",")
+                for c in criteria:
+                    if c[0] == ">":
+                        c = pd.to_datetime(c[1:])
+                        dataset = dataset[dataset.ts>c]
+                    elif c[0] == "<":
+                        c = pd.to_datetime(c[1:])
+                        dataset = dataset[dataset.ts<c]
+                    else:
+                        c = pd.to_datetime(c)
+                        dataset = dataset[dataset.ts==c]
             elif criteria.startswith('ref:'):
                 dataset = dataset[dataset.ref==criteria.replace('ref:', '').strip()]
             elif criteria.startswith('predict:'):
@@ -129,8 +141,11 @@ def text_similarity(model: Model, **params):
 def text_summary(model: Model, **params):
     def get(dataset):
         #dataset = model.devset if 'set' in params and params['set']=='dev' else model.trainset
-        if 'filter' in params and params['filter'] != '':
-            dataset = filter_dataset(dataset, params["filter"])
+        hidefiltered = True if 'hidefiltered' in params and params['hidefiltered'] else False
+        filter = params["filter"] if 'filter' in params else None
+        filtered_dataset = filter_dataset(dataset, filter)
+        if hidefiltered and filter:
+            dataset = filtered_dataset
         dataset = dataset[dataset.predict.notna()]
         if dataset.shape[0] > 20000:
             per_group = 20000 // model.group_stats["num_group"]
@@ -141,13 +156,24 @@ def text_summary(model: Model, **params):
             'ref', 'predict']].copy()
         dataset['text'] = dataset['text'].str.slice(0, 80)
         dataset.reset_index(inplace=True)
+        
         dataset.rename(columns={"index":"id"}, inplace=True)
-        return dataset.fillna("").to_dict(orient='records')
+        if filter and not hidefiltered:
+            not_filtered = filtered_dataset.reset_index()["index"].to_list()
+            dataset["filtered"] = True
+            dataset.loc[dataset.id.isin(not_filtered), "filtered"] = False
+        else:
+            dataset["filtered"] = False
+        return (filtered_dataset, dataset.fillna("").to_dict(orient='records'))
+    train_filtered, train_result = get(model.trainset)
+    train_filtered = train_filtered.groupby("predict").first().reset_index()["predict"]
     model.log.finished(param = {
-        'train': get(model.trainset),
-        "dev": get(model.devset),
+        'train': train_result,
+        'dev': get(model.devset)[1],
+        'groups': train_filtered.to_list(),
     })
 
+@LockModel
 def group_search(model: Model, **params):
     dataset = model.devset if 'set' in params and params['set']=='dev' else model.trainset
     if 'filter' in params and params['filter'] != '':
@@ -158,6 +184,7 @@ def group_search(model: Model, **params):
     })
 
 
+@LockModel
 def group_over_time(model: Model, **kwargs):
     try:
         model.log.working("Calculating group trends...")
@@ -170,7 +197,7 @@ def group_over_time(model: Model, **kwargs):
         else:
             dataset["tsbin"] = dataset["ts"]
         counts = dataset.sort_values(["tsbin", "predict"]).groupby(by=["tsbin", "predict"], as_index=False).count()
-        result = [{"idx": i, "text": model.group_summaries.loc[i, "repr_text"].str.slice(0, 80) if i > -1 else "", "x": [], "y": []} for i in range(-1, model.group_summaries.shape[0])]
+        result = [{"idx": i, "text": model.group_summaries.loc[i, "repr_text"][0:80] if i > -1 else "", "x": [], "y": []} for i in range(-1, model.group_summaries.shape[0])]
 
         def toresult(row):
             result[row.predict+1]["x"].append(row.tsbin)
@@ -181,3 +208,4 @@ def group_over_time(model: Model, **kwargs):
         traceback.print_exc()
         model.log.error("Error calculating group trends")
         return
+# %%
