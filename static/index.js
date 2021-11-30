@@ -1441,6 +1441,7 @@ init = function() {
         ["text", "ref", "ts_before", "ts_exact", "ts_after", "predict", "target"].forEach((v)=>{
             $("#filter_by_" + v).prop("checked", false);
         });
+        $("#confirm_filter").click();
     });
     $("#filter_dataset").click(() => {
         $("#confirm_filter").off("click").click(()=> {

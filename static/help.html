@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Manual of the (: ABC :) machine</title>
+    </head>
+    <body>
+        <h1>the (: ABC :) machine</h1>
+        <h2>What is this?</h2>
+        <p>
+            The (: ABC :) machine is a tool that provides a front end user interface 
+            for text clustering task using SBERT/UMAP/HDBSCAN, or to make it simple, 
+            it tries to cluster (or classifies) human readable texts into groups 
+            within a few mouse clicks.
+        </p>
+        <h2>Why do I need it?</h2>
+        <p>
+            This tool is created originally to assist chat-bot creation for a  
+            company by clustering human chat logs to aid sentence pattern searching and also 
+            to find flow patterns of a chat. But of course any tasks involving sentence/
+            document clustering can be done with this tool (albeit may not be ideal).
+        </p>
+        <p>
+            If you are a professional, you may know how to do the work with the tools you 
+            already have, but this tool is still handy for you for idea searching or quick/
+            casual works by removing all coding and debudding needs.
+        </p>
+        <p>
+            Even if you are not a professional, you will find this tool easy to use 
+            for a number of task you may be interested with. For example, you may 
+            want to classify user reviews of your products to have a general idea how 
+            if behaves.
+        </p>
+        <h2>Is this tool for production time deployment (ie. real time text prediction)?</h2>
+        <p>
+            This tool is ready for production use with easy to use API via WebSocket, that 
+            is, it can be deployed in the cloud with multiple instances for real-time 
+            clustering (which is a requirement for a chat-bot). And of course slight 
+            modification is necessary to best suit your needs (security, network structures, 
+            etc.)
+        </p>
+        <h2>How do I begin with?</h2>
+        <p>
+            Actions are hidden inside the hambuger menu in the top left corner, and 
+            every actions should be self-explainary.
+        </p>
+        <p>
+            Let's take a look of an example, first you have to prepare your dataset, 
+            you may try <a href="https://www.kaggle.com/veeralakrishna/relational-strategies-in-customer-servicersics">RSICS dataset from Kaggle</a>, 
+            download and extract it, and we will only use <i>tagged_selections_by_sentence.csv</i> for clustering.
+        </p>
+        <p>
+            Now from the hamburger menu and select <b><i>Upload</i></b>, drag and drop 
+            <i>tagged_selections_by_sentence.csv</i> into the center box, and a table 
+            should be appear below the box, and that makes the preview of the dataset.
+            <p>
+                <i>
+                    For identification, you may want to change your model's name by clicking on the 
+                    name of the model, which is on top of the <b>Basic</b> banner and defaults 
+                    to a date-time value.
+                </i>
+            </p>
+        </p>
+        <p>
+            We are using the 5th column as input (or the 4th one is also OK if you wish), 
+            so click on the drop-down box in the 5th column and choose <b><i>Text</i></b> to indicate 
+            that column is the input text column. With that set, click <b><i>Begin Upload</i></b> in 
+            the dialog to continue.
+        </p>
+        <p>
+            Although not used in this example, there are other types of columns you may 
+            be interested in:
+            <table>
+                <tbody>
+                    <tr>
+                        <td>Text</td>
+                        <td>The input text column</td>
+                    </tr>
+                    <tr>
+                        <td>Reference</td>
+                        <td>The reference column just for your reference :)</td>
+                    </tr>
+                    <tr>
+                        <td>Timestamp</td>
+                        <td>A date/time column for topic-over-time analysis</td>
+                    </tr>
+                    <tr>
+                        <td>Target</td>
+                        <td>Theprediction target column for semi-supervised / 
+                            supervised clustering, in the case of semi-supervised 
+                            training, a value of -1 means no target.
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>Predict / Distance</td>
+                        <td>The actual training result, exported by this tool</td>
+                    </tr>
+                    <tr>
+                        <td>Set</td>
+                        <td>An indicator which dataset is the row belongs to. 
+                            If not provided every row belongs to training set.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </p>
+        <p>
+            After uplading finished, the next step is to create a model, from the 
+            hamburger menu select <b><i>Create Model</i></b>, and because we use only 
+            default parameter here, simply click on <b><i>Create Model</i></b> to continue.
+            <p>
+                <i>Note: Model creation may take minutes.</i>
+            </p>
+        </p>
+        <p>
+            After model creation is finished, it's now time to train our model! Again 
+            from the hamburger menu select <b><i>Training / Testing</i></b>, and simply 
+            click on the <b><i>Begin Training on train set</i></b> button and model 
+            training will be started.
+            <p>
+                <i>
+                    Note: While most of the training step is fast, embedding creation 
+                    may take hours depending on which embedding model did you choose 
+                    and how large your dataset is.
+                </i>
+            </p>
+        </p>
+        <p>
+            And that's all! After training is finished you can see the group number of 
+            each sentence in the <b>Data</b> tab, while in the <b>Groups</b> tab you will 
+            see how sentences are clustered into different groups and how are they related 
+            with the (clumsy) tree view, with also some simple statictics on 
+            how well the model performs.
+        </p>
+        <p>
+            Some of the tool you may want to use for analysis:
+            <ul>
+                <li>Click on the group number for some more details about the group.</li>
+                <li>Data filtering can be done with <b><i>Advanced Filter</i></b> button.</li>
+                <li>Scatter plot can be use for a brief look on sentence/group relationships</li>
+                <li>Highlighting on a dataset row gives you a color scale on sentences similarity</li>
+            </ul>
+        </p>
+        <h2>Notes on scatter plot</h2>
+        <p>
+            The scatter plot is a 2D representations of how sentence/documents/groups 
+            related to each other, but it is because there is no way to 
+            create a accurate 2D projection for embeddings which has 200+ dimensions 
+            in the original space, distance between points may be be well represented 
+            so the plot is only for reference.
+        </p>
+        <p>
+            The original plot is actually 3D, because, well, 3D has one more dimension 
+            than 2D! But it turns out 3D chart is more difficult to use (navigating 
+            is a pain) and therefore I switched back to 2D scatter plots. Nevertheless, 
+            it is not that difficult to switch back to 3D so feel free to try if you wish to.
+        </p>
+        <h2>Grouping are sparse / It created so many groups!</h2>
+        <p>
+            First of all, this tool is originally design for sentence 
+            clustering for chat-bot making, so it is supposed to make as many groups as 
+            it can find to spot the slightly different meanings between each sentences, 
+            as <i>"How do I change my email?"</i> should have different response than 
+            <i>"Can I change my email?"</i>, which may look similar with topic-modelling.
+        </p>
+        <p>
+            After-all one can reduce groups by "grouping the group", but one cannot 
+            increase group counts without "clustering the cluster" again. Both requires 
+            additional work, but the former must be easier than the latter IMO.
+        </p>
+    </body>
+</html>

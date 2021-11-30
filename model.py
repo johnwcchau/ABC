@@ -960,7 +960,7 @@ class Model:
         self.log.finished("Testing result ready")
 
     @LockModel
-    def adhoc_predict(self, texts:list = None, detailed:bool = False, embeddings:list = None, **kwargs):
+    def adhoc_predict(self, texts:list = None, detailed:bool = False, verbose: bool = False, embeddings:list = None, **kwargs):
         log = self.log
         if self.embedding_model is None:
             log.invalid("Create embedding model first")
@@ -979,9 +979,9 @@ class Model:
             return
         try:
             if embeddings is None:
-                log.working("Creating embeddings...")
+                if verbose: log.working("Creating embeddings...")
                 embeddings = self.embedding_model.encode(texts)
-            log.working("Dimension reduction...")
+            if verbose: log.working("Dimension reduction...")
             umaps = self.reduction_model.transform(embeddings)
             #from pprint import pprint
             #pprint(umaps)
@@ -990,7 +990,7 @@ class Model:
                 xs = xyzs[:, 0]
                 ys = xyzs[:, 1]
                 #zs = xyzs[:, 2]
-            log.working("Clustering...")
+            if verbose: log.working("Clustering...")
             #
             # 2 aproaches:
             #   1 is use approximate_predict from hdbscan
